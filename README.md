@@ -96,3 +96,15 @@ The `public/index.html` interface includes a multi-room management panel to hand
 - **Capacity Limits**: Rooms are strictly limited to a maximum of two simultaneous connections.
 - **Stateless Server Design**: Backend server restarts wipe all current routing states. Because the server stores no data logs, users must simply refresh the client page to reconnect and resume communication.
 - **Metadata Exposure**: While message contents remain entirely encrypted and unreadable to third parties, the hosting provider or server administrator can view active connection statuses, IP endpoints, and transmission timestamps.
+
+
+### Resolving Insecure Context Restrictions for LAN Testing
+
+Browsers restrict the Web Crypto API to secure origins (`https://` or `localhost`), meaning local IP addresses (like `http://192.168.x.x`) can trigger encryption errors. For Chromium-based browsers, you can bypass this in testing environments:
+
+1. Navigate to `chrome://flags/#unsafely-treat-insecure-origin-as-secure` (or `edge://flags/...` for Edge).
+2. Find the **"Insecure origins treated as secure"** setting.
+3. Enter your host's local IP and port (e.g., `http://192.168.1.23:8181`).
+4. Change the dropdown from **Disabled** to **Enabled** and **Relaunch** the browser.
+5. Repeat on secondary testing devices if needed.
+
