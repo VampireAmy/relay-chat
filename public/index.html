@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>relay</title>
+<style>
+  :root {
+    --bg: #000000; --panel: #121214; --border: #232326; --text: #f2f2f7; --muted: #8e8e93;
+    --accent: #0a84ff; --reply: #34c759; --bubble-out-a: #2c2c2e; --bubble-out-b: #232325;
+    --bubble-in: #1c1c1e; --danger: #ff453a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  #msgInput, textarea, input { user-select: text; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
+  .emoji { font-family: 'Apple Color Emoji', -apple-system, 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif; }
+  button { font-family: inherit; }
+
+  #app { display: flex; height: 100%; max-width: 900px; margin: 0 auto; background: var(--bg); }
+
+  /* ---------- sidebar (room list) ---------- */
+  #sidebar { width: 100%; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  #sidebarHead { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  #sidebarHead h2 { font-size: 17px; margin: 0; font-weight: 700; }
+  #addRoomBtn { width: 34px; height: 34px; border-radius: 50%; border: none; background: var(--accent); color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  #roomListItems { flex: 1; overflow-y: auto; }
+  .room-item { display: flex; align-items: center; gap: 11px; padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .room-item:hover, .room-item.active { background: var(--border); }
+  .room-avatar { width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; background: linear-gradient(135deg, var(--accent), #0060df); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 17px; }
+  .room-info { flex: 1; min-width: 0; }
+  .room-name { font-size: 14.5px; font-weight: 600; }
+  .room-preview { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .room-time { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+  #emptyRooms { padding: 30px 20px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+  /* ---------- main chat area ---------- */
+  #mainArea { flex: 1; display: none; flex-direction: column; min-width: 0; }
+  #backBtn { display: flex; background: none; border: none; color: var(--accent); cursor: pointer; padding: 6px; }
+  #backBtn svg { width: 22px; height: 22px; }
+  #header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  #avatar { width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0; background: linear-gradient(135deg, var(--accent), #0060df); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; }
+  #headerText { flex: 1; min-width: 0; }
+  #headerName { font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #headerStatus { font-size: 12px; color: var(--muted); }
+  #headerStatus.online { color: var(--reply); }
+  #settingsBtn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 50%; display: flex; flex-shrink: 0; }
+  #settingsBtn:hover { background: var(--border); color: var(--text); }
+  #settingsBtn svg { width: 19px; height: 19px; }
+  #exportBtn, #clearBtn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 50%; display: flex; flex-shrink: 0; }
+  #exportBtn:hover, #clearBtn:hover { background: var(--border); color: var(--text); }
+  #exportBtn svg, #clearBtn svg { width: 18px; height: 18px; }
+  #notifBtn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 50%; display: flex; flex-shrink: 0; }
+  #notifBtn:hover { background: var(--border); color: var(--text); }
+  #notifBtn.muted { color: var(--danger); }
+  #notifBtn svg { width: 18px; height: 18px; }
+  #soundBtn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 50%; display: flex; flex-shrink: 0; }
+  #soundBtn:hover { background: var(--border); color: var(--text); }
+  #soundBtn.muted { color: var(--danger); }
+  #soundBtn svg { width: 18px; height: 18px; }
+  #searchBtn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 50%; display: flex; flex-shrink: 0; }
+  #searchBtn:hover { background: var(--border); color: var(--text); }
+  #searchBtn svg { width: 18px; height: 18px; }
+
+  /* ---------- search bar ---------- */
+  #searchBar { display: none; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  #searchBar input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13.5px; padding: 7px 10px; outline: none; }
+  #searchBar input:focus { border-color: var(--accent); }
+  #searchCount { font-size: 12px; color: var(--muted); white-space: nowrap; min-width: 40px; text-align: center; }
+  #searchBar button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; display: flex; }
+  #searchBar button:hover { color: var(--text); }
+  #searchBar svg { width: 17px; height: 17px; }
+  .row.search-hidden { display: none !important; }
+
+  .msg-edited { font-size: 10px; color: var(--muted); font-style: italic; margin-right: 3px; }
+  .bubble.in .msg-edited { color: var(--muted); }
+  .bubble-deleted { font-style: italic; opacity: 0.6; }
+
+  #bg-pattern { flex: 1; overflow-y: auto; padding: 14px 12px 6px; }
+  #messages { display: flex; flex-direction: column; gap: 3px; width: 100%; }
+
+  .row { display: flex; }
+  .row.out { justify-content: flex-end; }
+  .row.in { justify-content: flex-start; }
+  .row.sys { justify-content: center; margin: 8px 0; }
+  .bubble-wrap { max-width: 76%; display: flex; flex-direction: column; }
+  .row.out .bubble-wrap { align-items: flex-end; }
+  .row.in .bubble-wrap { align-items: flex-start; }
+  .quote { font-size: 11.5px; padding: 3px 8px; margin-bottom: 2px; border-left: 2.5px solid var(--reply); border-radius: 3px; background: rgba(52,199,89,0.08); max-width: 100%; }
+  .quote .qname { color: var(--reply); font-weight: 600; }
+  .quote .qtext { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .bubble { position: relative; padding: 7px 11px 6px; border-radius: 15px; font-size: 14.5px; line-height: 1.4; word-wrap: break-word; cursor: pointer; }
+  .bubble.out { background: linear-gradient(180deg, var(--bubble-out-a), var(--bubble-out-b)); border-bottom-right-radius: 4px; color: var(--text); }
+  .bubble.in { background: var(--bubble-in); border-bottom-left-radius: 4px; }
+  .bubble.highlighted { box-shadow: 0 0 0 2px var(--accent) inset; }
+  .quote { cursor: pointer; }
+  .bubble.out::after { content: ""; position: absolute; right: -6px; bottom: 0; width: 12px; height: 12px; background: var(--bubble-out-b); clip-path: path('M0 0 L12 12 L0 12 Z'); }
+  .bubble.in::after { content: ""; position: absolute; left: -6px; bottom: 0; width: 12px; height: 12px; background: var(--bubble-in); clip-path: path('M12 0 L12 12 L0 12 Z'); }
+  .meta { display: flex; align-items: center; gap: 3px; justify-content: flex-end; font-size: 10.5px; color: rgba(255,255,255,0.4); margin-top: 3px; float: right; margin-left: 8px; }
+  .bubble.in .meta { color: var(--muted); }
+  .tick svg { display: block; }
+  .reactions { display: flex; gap: 3px; margin-top: 2px; flex-wrap: wrap; }
+  .reaction-pill { font-size: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px; display: flex; align-items: center; gap: 3px; cursor: pointer; }
+  .reaction-pill.mine { border-color: var(--accent); background: rgba(10,132,255,0.12); }
+  .sys-msg { font-size: 11.5px; color: var(--muted); background: var(--panel); padding: 4px 12px; border-radius: 10px; }
+  #typing-row { display: none; padding: 0 12px 6px; font-size: 12px; color: var(--muted); }
+  #replyPreview { display: none; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel); border-top: 1px solid var(--border); }
+  #replyPreview .bar { width: 3px; align-self: stretch; background: var(--reply); border-radius: 2px; }
+  #replyPreview .info { flex: 1; min-width: 0; }
+  #replyPreview .rname { font-size: 12px; color: var(--reply); font-weight: 600; }
+  #replyPreview .rtext { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #replyPreview .cancel { color: var(--muted); cursor: pointer; padding: 4px; font-size: 18px; }
+  #editPreview { display: none; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel); border-top: 1px solid var(--border); }
+  #editPreview .bar { width: 3px; align-self: stretch; background: #ffd60a; border-radius: 2px; }
+  #editPreview .info { flex: 1; min-width: 0; font-size: 12.5px; color: #ffd60a; font-weight: 600; }
+  #editPreview .cancel { color: var(--muted); cursor: pointer; padding: 4px; font-size: 18px; }
+
+  #micBtn { width: 36px; height: 36px; border-radius: 50%; border: none; flex-shrink: 0; background: none; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  #micBtn:hover { background: var(--border); }
+  #micBtn.recording { background: var(--danger); color: #fff; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+  #micBtn svg { width: 18px; height: 18px; }
+  .bubble audio.msg-audio { display: block; width: 210px; height: 34px; }
+
+  #inputBar { display: flex; align-items: flex-end; gap: 6px; padding: 10px 12px; background: var(--panel); border-top: 1px solid var(--border); flex-shrink: 0; }
+  #emojiBtn { width: 36px; height: 36px; border-radius: 50%; border: none; flex-shrink: 0; background: none; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  #emojiBtn:hover { background: var(--border); }
+  #attachBtn { width: 36px; height: 36px; border-radius: 50%; border: none; flex-shrink: 0; background: none; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  #attachBtn:hover { background: var(--border); }
+  #attachBtn svg { width: 19px; height: 19px; }
+  .bubble img.msg-image { display: block; max-width: 220px; max-height: 280px; border-radius: 10px; cursor: pointer; }
+  .msg-image-wrap { position: relative; }
+  #imageViewer {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95);
+    z-index: 2000; align-items: center; justify-content: center; cursor: pointer;
+  }
+  #imageViewer img { max-width: 95vw; max-height: 95vh; object-fit: contain; cursor: pointer; }
+  .media-download-btn {
+    position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(0,0,0,0.55); border: none; color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .media-download-btn svg { width: 14px; height: 14px; }
+  .media-download-btn:hover { background: rgba(0,0,0,0.75); }
+  .msg-audio-wrap { display: flex; align-items: center; gap: 6px; }
+  .media-download-btn.audio-dl { position: static; background: var(--panel); color: var(--muted); flex-shrink: 0; }
+  .media-download-btn.audio-dl:hover { color: var(--text); }
+  #msgInput { flex: 1; resize: none; max-height: 120px; min-height: 40px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; color: var(--text); font-size: 14.5px; padding: 10px 16px; outline: none; font-family: inherit; }
+  #msgInput:focus { border-color: var(--accent); }
+  #sendBtn { width: 40px; height: 40px; border-radius: 50%; border: none; flex-shrink: 0; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  #sendBtn svg { width: 18px; height: 18px; }
+
+  /* ---------- reaction / context popup ---------- */
+  #popupOverlay, #emojiOverlay { display: none; position: fixed; inset: 0; z-index: 1000; }
+  #popup, #emojiPopup { position: absolute; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 8px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); width: 250px; }
+  #quickRow { display: flex; justify-content: space-between; align-items: center; padding: 4px 4px 8px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+  .quick-emoji { font-size: 22px; cursor: pointer; padding: 3px; border-radius: 8px; }
+  .quick-emoji:hover { background: var(--border); }
+  #expandBtn { cursor: pointer; color: var(--text); padding: 5px 9px; border-radius: 8px; background: var(--border); display: flex; align-items: center; gap: 4px; font-size: 11px; flex-shrink: 0; }
+  #expandBtn:hover { background: var(--accent); color: #fff; }
+  #expandBtn svg { width: 14px; height: 14px; display: block; }
+  #fullGrid, #composerGrid { display: none; grid-template-columns: repeat(7, 1fr); gap: 2px; max-height: 220px; overflow-y: auto; padding: 4px; }
+  #fullGrid span, #composerGrid span { font-size: 19px; text-align: center; cursor: pointer; padding: 4px 0; border-radius: 8px; }
+  #fullGrid span:hover, #composerGrid span:hover { background: var(--border); }
+  .menu-item { display: flex; align-items: center; gap: 10px; padding: 9px 6px; font-size: 14px; cursor: pointer; border-radius: 8px; }
+  .menu-item:hover { background: var(--border); }
+  .menu-item svg { width: 17px; height: 17px; color: var(--muted); }
+
+  /* ---------- add-room modal ---------- */
+  #addRoomOverlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1100; align-items: center; justify-content: center; }
+  #addRoomModal { background: var(--panel); border-radius: 14px; padding: 24px; width: 320px; max-width: 90vw; }
+  #addRoomModal h3 { margin: 0 0 18px; font-size: 16px; text-align: center; }
+  #addRoomModal label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 6px; }
+  #addRoomModal label:first-of-type { margin-top: 0; }
+  #addRoomModal input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px; padding: 10px 12px; outline: none; }
+  #addRoomModal input:focus { border-color: var(--accent); }
+  #addRoomModal .btnRow { display: flex; gap: 8px; margin-top: 18px; }
+  #addRoomModal button { flex: 1; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; padding: 11px; cursor: pointer; }
+  #addRoomCancel { background: var(--border); color: var(--text); }
+  #addRoomSubmit { background: var(--accent); color: #fff; }
+  #addRoomError { color: var(--danger); font-size: 12px; margin-top: 8px; min-height: 14px; text-align: center; }
+
+  #bg-pattern::-webkit-scrollbar, #roomListItems::-webkit-scrollbar { width: 6px; }
+  #bg-pattern::-webkit-scrollbar-thumb, #roomListItems::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* ---------- responsive: landscape+wide = split view, else single pane ---------- */
+  @media (orientation: landscape) and (min-width: 700px) {
+    #sidebar { width: 320px; flex-shrink: 0; display: flex !important; }
+    #mainArea { display: flex !important; }
+  }
+  body.view-chat #sidebar { display: none; }
+  body.view-chat #mainArea { display: flex; }
+  body.view-list #sidebar { display: flex; }
+  body.view-list #mainArea { display: none; }
+</style>
+</head>
+<body class="view-list">
+
+<div id="app">
+  <div id="sidebar">
+    <div id="sidebarHead">
+      <h2>Relay</h2>
+      <button id="addRoomBtn" onclick="openAddRoom()">+</button>
+    </div>
+    <div id="roomListItems"></div>
+  </div>
+
+  <div id="mainArea">
+    <div id="header">
+      <button id="backBtn" onclick="showListView()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div id="avatar">?</div>
+      <div id="headerText">
+        <div id="headerName">Waiting…</div>
+        <div id="headerStatus">connecting…</div>
+      </div>
+      <button id="searchBtn" onclick="toggleSearch()" title="Search in this room">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+      </button>
+      <button id="exportBtn" onclick="exportHistory()" title="Export history to a text file">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v13"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>
+      </button>
+      <button id="clearBtn" onclick="clearHistory()" title="Clear history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+      </button>
+      <button id="soundBtn" onclick="toggleSound()" title="Toggle tap sound">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
+      </button>
+      <button id="notifBtn" onclick="toggleNotifications()" title="Toggle notification banners">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      </button>
+      <button id="settingsBtn" onclick="forgetCurrentRoom()" title="Leave this room">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+      </button>
+    </div>
+    <div id="searchBar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16" style="color:var(--muted); flex-shrink:0;"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input type="text" id="searchInput" placeholder="Search this room" oninput="runSearch()">
+      <span id="searchCount"></span>
+      <button onclick="searchNav(-1)" title="Previous match"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg></button>
+      <button onclick="searchNav(1)" title="Next match"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button onclick="closeSearch()" title="Close">✕</button>
+    </div>
+    <div id="bg-pattern"><div id="messages"></div></div>
+    <div id="typing-row"><span id="typing-name"></span> is typing…</div>
+    <div id="replyPreview">
+      <div class="bar"></div>
+      <div class="info"><div class="rname" id="replyName"></div><div class="rtext" id="replyText"></div></div>
+      <div class="cancel" onclick="cancelReply()">✕</div>
+    </div>
+    <div id="editPreview">
+      <div class="bar"></div>
+      <div class="info">Editing message</div>
+      <div class="cancel" onclick="cancelEdit()">✕</div>
+    </div>
+    <div id="inputBar">
+      <button id="emojiBtn" onclick="toggleComposerEmoji(event)">🙂</button>
+      <button id="attachBtn" onclick="document.getElementById('imgInput').click()" title="Send a photo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      </button>
+      <input type="file" id="imgInput" accept="image/*" style="display:none;" onchange="handleImagePick(event)">
+      <button id="micBtn" onclick="toggleVoiceRecording()" title="Send a voice note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0"/><path d="M12 17v5"/></svg>
+      </button>
+      <textarea id="msgInput" placeholder="Message (**bold**, *italic*)" onkeydown="handleKey(event)" oninput="handleTyping()"></textarea>
+      <button id="sendBtn" onclick="sendMessage()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<!-- reaction / message context popup -->
+<div id="popupOverlay">
+  <div id="popup">
+    <div id="quickRow" class="emoji">
+      <span class="quick-emoji">👍</span><span class="quick-emoji">🤣</span><span class="quick-emoji">💋</span>
+      <span class="quick-emoji">😢</span><span class="quick-emoji">🍓</span><span class="quick-emoji">🔥</span>
+      <span id="expandBtn">More <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></span>
+    </div>
+    <div id="fullGrid" class="emoji"></div>
+    <div class="menu-item" id="menuReply"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 17l-5-5 5-5"/><path d="M4 12h10a6 6 0 016 6v1"/></svg>Reply</div>
+    <div class="menu-item" id="menuCopy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/></svg>Copy Text</div>
+    <div class="menu-item" id="menuEdit" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</div>
+    <div class="menu-item" id="menuDelete" style="display:none; color:var(--danger);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>Delete</div>
+  </div>
+</div>
+
+<!-- composer emoji popup (PC only — Android uses its own keyboard) -->
+<div id="emojiOverlay">
+  <div id="emojiPopup"><div id="composerGrid" class="emoji"></div></div>
+</div>
+
+<!-- fullscreen image viewer -->
+<div id="imageViewer" onclick="closeImageViewer()">
+  <img id="imageViewerImg" src="" alt="">
+</div>
+
+<!-- add room modal -->
+<div id="addRoomOverlay">
+  <div id="addRoomModal">
+    <h3>Add a room</h3>
+    <label for="server">Server address</label>
+    <input id="server" placeholder="wss://your-vps-address:8181">
+    <label for="room">Room name</label>
+    <input id="room" placeholder="a name only you two know">
+    <label for="pass">Passphrase</label>
+    <div style="position:relative;">
+      <input id="pass" type="password" placeholder="shared secret" style="padding-right:38px;" oninput="updatePassStrength()">
+      <button type="button" onclick="togglePassVisible()" style="position:absolute; right:4px; top:4px; bottom:4px; width:32px; background:none; border:none; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center;" title="Show/hide">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="17" height="17"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>
+    <div id="passStrength" style="font-size:11.5px; margin-top:4px; min-height:14px;"></div>
+    <label for="myname">Your name</label>
+    <input id="myname" placeholder="what you'll be called">
+    <div class="btnRow">
+      <button id="addRoomCancel" onclick="closeAddRoom()">Cancel</button>
+      <button id="addRoomSubmit" onclick="submitAddRoom()">Connect</button>
+    </div>
+    <div id="addRoomError"></div>
+  </div>
+</div>
+
+<script>
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+const ROOMS_KEY = 'relay_rooms';
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+
+let ws, aesKey, myName, peerName = null;
+let currentRoomKey = null;
+let lastTypingSent = 0;
+const pendingTicks = {};
+const messageStore = {};
+const myReactions = {};
+const peerReactions = {};
+let replyTarget = null;
+let activePopupMsgId = null;
+let myMessageOrder = []; // ordered ids of my own sent messages, for "seen up to X" resolution
+let lastPeerMsgId = null; // most recent message id genuinely from the other person
+let roomActiveFocused = false;
+let outgoingQueue = []; // {id, blob} messages waiting to actually go out
+let intentionalClose = false;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+let currentCfg = null;
+
+const FULL_EMOJI = [
+'❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','💌',
+'👻','😂','😬','🙄','😘','🍀',
+'💋','💗','🔥','✨',
+'🌸','🍯','🙂','🐰','🍰','💯',
+'🌞','🧸','🎂','😍',
+'🤝','😳',
+'❤️‍🔥','👀',
+'🤪','🤩','👎','💩','😈',
+'😀','😍','😘','😜','🤔','😎','🥳','😭','😡','🤯','🥰','😴','🤗','🙃',
+'👍','👎','👏','🙏','💪','🙌','✌️','💯',
+'⭐','🎉','🎂','🍓','🍕','☕','🌙','☀️','🌈','⚡','💧','🐱','🐶','🦄','🐳'];
+
+function toB64(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+function fromB64(str) { return Uint8Array.from(atob(str), c => c.charCodeAt(0)); }
+
+function roomKeyFor(server, room) { return server.trim() + '::' + room.trim(); }
+function loadRooms() { try { return JSON.parse(localStorage.getItem(ROOMS_KEY)) || []; } catch (e) { return []; } }
+function saveRooms(list) { localStorage.setItem(ROOMS_KEY, JSON.stringify(list)); }
+function upsertRoom(entry) {
+  const rooms = loadRooms();
+  const idx = rooms.findIndex(r => r.key === entry.key);
+  if (idx === -1) rooms.unshift(entry); else rooms[idx] = { ...rooms[idx], ...entry };
+  saveRooms(rooms);
+  renderRoomList();
+}
+function touchRoomPreview(key, text, time) {
+  const rooms = loadRooms();
+  const idx = rooms.findIndex(r => r.key === key);
+  if (idx === -1) return;
+  rooms[idx].lastMsg = text;
+  rooms[idx].lastTime = time;
+  rooms.unshift(rooms.splice(idx, 1)[0]);
+  saveRooms(rooms);
+  renderRoomList();
+}
+
+// ---------- local message history (per room, stored only on this device) ----------
+function historyKeyFor(roomKey) { return 'relay_history_' + roomKey; }
+function loadHistory(roomKey) { try { return JSON.parse(localStorage.getItem(historyKeyFor(roomKey))) || []; } catch (e) { return []; } }
+function saveHistory(roomKey, arr) {
+  try { localStorage.setItem(historyKeyFor(roomKey), JSON.stringify(arr)); }
+  catch (e) { /* storage full or blocked — history just won't persist this time */ }
+}
+function appendHistory(roomKey, entry) {
+  const arr = loadHistory(roomKey);
+  arr.push(entry);
+  saveHistory(roomKey, arr);
+}
+function updateHistoryReactions(roomKey, msgId) {
+  const arr = loadHistory(roomKey);
+  const item = arr.find(m => m.id === msgId);
+  if (!item) return;
+  item.myReaction = myReactions[msgId] || null;
+  item.peerReaction = peerReactions[msgId] || null;
+  saveHistory(roomKey, arr);
+}
+function clearHistory() {
+  if (!currentRoomKey) return;
+  if (!confirm('Clear all message history for this room on this device? This cannot be undone, and does not affect the other person\'s copy.')) return;
+  saveHistory(currentRoomKey, []);
+  document.getElementById('messages').innerHTML = '';
+  for (const k in messageStore) delete messageStore[k];
+  for (const k in myReactions) delete myReactions[k];
+  for (const k in peerReactions) delete peerReactions[k];
+  for (const k in pendingTicks) delete pendingTicks[k];
+  myMessageOrder = [];
+  lastPeerMsgId = null;
+  closeSearch();
+  addSys('History cleared on this device');
+}
+function exportHistory() {
+  if (!currentRoomKey) return;
+  const arr = loadHistory(currentRoomKey);
+  if (arr.length === 0) { addSys('Nothing to export yet'); return; }
+  const lines = arr.map(m => {
+    const who = m.dir === 'out' ? (myName || 'Me') : (peerName || 'Them');
+    const body = m.deleted ? '[message deleted]' : m.text + (m.edited ? ' (edited)' : '');
+    let line = `[${m.time}] ${who}: ${body}`;
+    if (m.replyTo && !m.deleted) line = `[${m.time}] ${who} (replying to ${m.replyTo.name}: "${m.replyTo.text}"): ${body}`;
+    if (!m.deleted && (m.myReaction || m.peerReaction)) {
+      const tags = [m.myReaction, m.peerReaction].filter(Boolean).join(' ');
+      line += `  [reacted: ${tags}]`;
+    }
+    return line;
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const roomLabel = (peerName || 'chat').replace(/[^a-z0-9]/gi, '_');
+  a.href = url;
+  a.download = `relay-${roomLabel}-${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function renderRoomList() {
+  const rooms = loadRooms();
+  const holder = document.getElementById('roomListItems');
+  holder.innerHTML = '';
+  if (rooms.length === 0) {
+    holder.innerHTML = '<div id="emptyRooms">No rooms yet — tap + to connect to one.</div>';
+    return;
+  }
+  for (const r of rooms) {
+    const item = document.createElement('div');
+    item.className = 'room-item' + (r.key === currentRoomKey ? ' active' : '');
+    const label = r.peerName || r.room;
+    item.innerHTML = `
+      <div class="room-avatar">${escapeHtml(label.charAt(0).toUpperCase())}</div>
+      <div class="room-info">
+        <div class="room-name">${escapeHtml(label)}</div>
+        <div class="room-preview">${escapeHtml(r.lastMsg || 'No messages yet')}</div>
+      </div>
+      <div class="room-time">${r.lastTime || ''}</div>`;
+    item.onclick = () => openRoom(r);
+    holder.appendChild(item);
+  }
+}
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function renderFormattedText(str) {
+  // Safe by construction: escape everything first, THEN apply markdown-lite
+  // on the already-escaped text, so no raw HTML from the message can ever
+  // reach innerHTML.
+  let s = escapeHtml(str);
+  s = s.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*\w])\*([^\n*]+?)\*(?!\*)/g, '$1<em>$2</em>');
+  s = s.replace(/(^|[^\w])_([^\n_]+?)_(?!\w)/g, '$1<em>$2</em>');
+  return s;
+}
+
+// ---------- view switching ----------
+function showListView() { document.body.classList.remove('view-chat'); document.body.classList.add('view-list'); renderRoomList(); updateRoomActiveState(); }
+function showChatView() { document.body.classList.remove('view-list'); document.body.classList.add('view-chat'); updateRoomActiveState(); }
+
+// ---------- seen-receipt activity tracking ----------
+function updateRoomActiveState() {
+  const isSplit = window.matchMedia('(orientation: landscape) and (min-width: 700px)').matches;
+  const viewingChat = isSplit ? true : document.body.classList.contains('view-chat');
+  roomActiveFocused = viewingChat && document.hasFocus() && !!currentRoomKey;
+  if (roomActiveFocused) checkAndSendSeen();
+}
+window.addEventListener('focus', updateRoomActiveState);
+window.addEventListener('blur', updateRoomActiveState);
+document.addEventListener('visibilitychange', updateRoomActiveState);
+async function checkAndSendSeen() {
+  if (!roomActiveFocused || !lastPeerMsgId || !ws || ws.readyState !== WebSocket.OPEN) return;
+  try { ws.send(await encryptPayload({ type: 'seen', upTo: lastPeerMsgId, from: myName })); } catch (e) {}
+}
+
+// ---------- add room modal ----------
+function togglePassVisible() {
+  const field = document.getElementById('pass');
+  field.type = field.type === 'password' ? 'text' : 'password';
+}
+function updatePassStrength() {
+  const val = document.getElementById('pass').value;
+  const el = document.getElementById('passStrength');
+  if (!val) { el.textContent = ''; return; }
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(r => r.test(val)).length;
+  let label, color;
+  if (val.length >= 14 && classes >= 2) { label = 'Strong — good for real use'; color = 'var(--reply)'; }
+  else if (val.length >= 8) { label = 'Okay — fine for testing, consider something longer for real use'; color = '#ffd60a'; }
+  else { label = 'Weak — fine for testing, but easy to guess for real conversations'; color = 'var(--danger)'; }
+  el.textContent = label;
+  el.style.color = color;
+}
+function openAddRoom() {
+  document.getElementById('addRoomError').textContent = '';
+  document.getElementById('passStrength').textContent = '';
+  const serverField = document.getElementById('server');
+  if (!serverField.value && location.protocol.startsWith('http')) {
+    const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    serverField.value = proto + location.host;
+  }
+  document.getElementById('addRoomOverlay').style.display = 'flex';
+}
+function closeAddRoom() { document.getElementById('addRoomOverlay').style.display = 'none'; }
+async function submitAddRoom() {
+  const server = document.getElementById('server').value.trim();
+  const room = document.getElementById('room').value.trim();
+  const pass = document.getElementById('pass').value.trim();
+  const name = document.getElementById('myname').value.trim();
+  const err = document.getElementById('addRoomError');
+  if (!server || !room || !pass || !name) { err.textContent = 'fill in all fields'; return; }
+  const key = roomKeyFor(server, room);
+  upsertRoom({ key, server, room, pass, name, peerName: null, lastMsg: '', lastTime: '' });
+  closeAddRoom();
+  openRoom({ key, server, room, pass, name });
+}
+
+// ---------- crypto ----------
+async function deriveKeyFromRoom(pass, room) {
+  const salt = await crypto.subtle.digest('SHA-256', enc.encode('salt:' + room));
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: new Uint8Array(salt), iterations: 200000, hash: 'SHA-256' }, keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function encryptPayload(obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, enc.encode(JSON.stringify(obj)));
+  const payload = new Uint8Array(iv.length + ct.byteLength);
+  payload.set(iv, 0); payload.set(new Uint8Array(ct), iv.length);
+  return toB64(payload.buffer);
+}
+async function decryptPayload(b64) {
+  const payload = fromB64(b64);
+  const iv = payload.slice(0, 12), ct = payload.slice(12);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, ct);
+  return JSON.parse(dec.decode(pt));
+}
+function tickSvg(state) {
+  if (state === 'seen') return `<span class="tick" style="color:var(--accent)"><svg width="15" height="11" viewBox="0 0 15 11" fill="none"><path d="M1 5.5L4.5 9L10 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 5.5L8.5 9L14 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+  if (state === 'delivered') return `<span class="tick" style="color:rgba(255,255,255,0.5)"><svg width="15" height="11" viewBox="0 0 15 11" fill="none"><path d="M1 5.5L4.5 9L10 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 5.5L8.5 9L14 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+  if (state === 'queued') return `<span class="tick" style="color:var(--muted)" title="Waiting to send — tap to retry"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>`;
+  return `<span class="tick"><svg width="12" height="11" viewBox="0 0 12 11" fill="none"><path d="M1 5.5L4.5 9L11 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+function scrollToBottom() { const c = document.getElementById('bg-pattern'); c.scrollTop = c.scrollHeight; }
+
+// ---------- jump-to-message (clicking a reply quote) ----------
+let highlightedMsgId = null;
+function clearHighlight() {
+  if (highlightedMsgId) {
+    const el = document.querySelector('.bubble[data-msg-id="' + highlightedMsgId + '"]');
+    if (el) el.classList.remove('highlighted');
+    highlightedMsgId = null;
+  }
+}
+function jumpToMessage(msgId) {
+  const el = document.querySelector('.bubble[data-msg-id="' + msgId + '"]');
+  if (!el) return;
+  clearHighlight();
+  el.classList.add('highlighted');
+  highlightedMsgId = msgId;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+document.getElementById('bg-pattern').addEventListener('click', () => clearHighlight());
+
+function nowLabel() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+function genId() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+// ---------- message rendering ----------
+function renderReactions(msgId) {
+  const holder = document.querySelector('.reactions[data-for="' + msgId + '"]');
+  if (!holder) return;
+  holder.innerHTML = '';
+  const combined = {};
+  if (myReactions[msgId]) combined[myReactions[msgId]] = (combined[myReactions[msgId]] || 0) + 1;
+  if (peerReactions[msgId]) combined[peerReactions[msgId]] = (combined[peerReactions[msgId]] || 0) + 1;
+  for (const emoji in combined) {
+    const pill = document.createElement('span');
+    pill.className = 'reaction-pill emoji' + (myReactions[msgId] === emoji ? ' mine' : '');
+    pill.textContent = emoji + (combined[emoji] > 1 ? ' ' + combined[emoji] : '');
+    pill.onclick = () => toggleMyReaction(msgId, emoji);
+    holder.appendChild(pill);
+  }
+}
+function addBubble(msgId, content, dir, time, name, replyTo, kind, opts) {
+  kind = kind || 'text';
+  opts = opts || {};
+  const previewText = kind === 'image' ? '📷 Photo' : kind === 'voice' ? '🎤 Voice note' : content;
+  messageStore[msgId] = { text: previewText, dir, name, kind, content, deleted: !!opts.deleted, edited: !!opts.edited };
+  const messages = document.getElementById('messages');
+  const row = document.createElement('div');
+  row.className = 'row ' + dir;
+  const wrap = document.createElement('div');
+  wrap.className = 'bubble-wrap';
+  if (replyTo) {
+    const q = document.createElement('div');
+    q.className = 'quote';
+    q.innerHTML = `<span class="qname">${escapeHtml(replyTo.name)}</span><span class="qtext">${escapeHtml(replyTo.text)}</span>`;
+    if (replyTo.id) {
+      q.addEventListener('click', (e) => { e.stopPropagation(); jumpToMessage(replyTo.id); });
+    }
+    wrap.appendChild(q);
+  }
+  const b = document.createElement('div');
+  b.className = 'bubble ' + dir;
+  b.dataset.msgId = msgId;
+  renderBubbleContent(b, kind, content, opts.deleted);
+  const meta = document.createElement('span');
+  meta.className = 'meta';
+  if (opts.edited && !opts.deleted) {
+    const ed = document.createElement('span');
+    ed.className = 'msg-edited';
+    ed.textContent = '(edited)';
+    meta.appendChild(ed);
+  }
+  meta.insertAdjacentHTML('beforeend', time);
+  if (dir === 'out') {
+    const t = document.createElement('span');
+    t.innerHTML = tickSvg(opts.status || 'sent');
+    t.style.cursor = 'pointer';
+    t.onclick = (e) => { e.stopPropagation(); retryMessage(msgId); };
+    meta.appendChild(t);
+    pendingTicks[msgId] = t;
+  }
+  b.appendChild(meta);
+  wrap.appendChild(b);
+  const reactions = document.createElement('div');
+  reactions.className = 'reactions';
+  reactions.setAttribute('data-for', msgId);
+  wrap.appendChild(reactions);
+  attachLongPress(b, msgId);
+  row.appendChild(wrap);
+  messages.appendChild(row);
+  scrollToBottom();
+}
+function renderBubbleContent(b, kind, content, deleted) {
+  // clear any existing content node (used both for initial render and edits)
+  [...b.querySelectorAll('.msg-text, .msg-image-wrap, .msg-audio-wrap, .bubble-deleted')].forEach(n => n.remove());
+  if (deleted) {
+    const span = document.createElement('span');
+    span.className = 'bubble-deleted';
+    span.textContent = 'This message was deleted';
+    b.insertBefore(span, b.firstChild);
+  } else if ((kind === 'image' || kind === 'voice') && !content) {
+    // media that was sent in a past session and never persisted locally
+    const span = document.createElement('span');
+    span.className = 'bubble-deleted';
+    span.textContent = (kind === 'image' ? '📷 Photo' : '🎤 Voice note') + ' — deleted media (not saved on this device)';
+    b.insertBefore(span, b.firstChild);
+  } else if (kind === 'image') {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-image-wrap';
+    const img = document.createElement('img');
+    img.className = 'msg-image';
+    img.src = content;
+    img.onclick = (e) => { e.stopPropagation(); openImageViewer(content); };
+    const dl = document.createElement('button');
+    dl.className = 'media-download-btn';
+    dl.title = 'Download photo';
+    dl.innerHTML = downloadIconSvg();
+    dl.onclick = (e) => { e.stopPropagation(); downloadDataUrl(content, 'relay-photo-' + Date.now() + '.jpg'); };
+    wrap.appendChild(img);
+    wrap.appendChild(dl);
+    b.insertBefore(wrap, b.firstChild);
+  } else if (kind === 'voice') {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-audio-wrap';
+    const audio = document.createElement('audio');
+    audio.className = 'msg-audio';
+    audio.controls = true;
+    audio.src = content;
+    const dl = document.createElement('button');
+    dl.className = 'media-download-btn audio-dl';
+    dl.title = 'Download voice note';
+    dl.innerHTML = downloadIconSvg();
+    dl.onclick = (e) => { e.stopPropagation(); downloadDataUrl(content, 'relay-voice-' + Date.now() + '.webm'); };
+    wrap.appendChild(audio);
+    wrap.appendChild(dl);
+    b.insertBefore(wrap, b.firstChild);
+  } else {
+    const span = document.createElement('span');
+    span.className = 'msg-text';
+    span.innerHTML = renderFormattedText(content);
+    b.insertBefore(span, b.firstChild);
+  }
+}
+function downloadIconSvg() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v13"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>';
+}
+function downloadDataUrl(dataUrl, filename) {
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+function openImageViewer(src) {
+  document.getElementById('imageViewerImg').src = src;
+  document.getElementById('imageViewer').style.display = 'flex';
+}
+function closeImageViewer() {
+  document.getElementById('imageViewer').style.display = 'none';
+  document.getElementById('imageViewerImg').src = '';
+}
+function addSys(text) {
+  const messages = document.getElementById('messages');
+  const row = document.createElement('div');
+  row.className = 'row sys';
+  const s = document.createElement('div');
+  s.className = 'sys-msg';
+  s.textContent = text;
+  row.appendChild(s);
+  messages.appendChild(row);
+  scrollToBottom();
+}
+
+// ---------- message long-press popup (reply / react) ----------
+function attachLongPress(el, msgId) {
+  let timer;
+  const start = () => { timer = setTimeout(() => openPopup(el, msgId), 420); };
+  const cancel = () => clearTimeout(timer);
+  el.addEventListener('pointerdown', start);
+  el.addEventListener('pointerup', cancel);
+  el.addEventListener('pointerleave', cancel);
+  el.addEventListener('contextmenu', (e) => { e.preventDefault(); openPopup(el, msgId); });
+}
+function openPopup(el, msgId) {
+  activePopupMsgId = msgId;
+  const overlay = document.getElementById('popupOverlay');
+  const popup = document.getElementById('popup');
+  document.getElementById('fullGrid').style.display = 'none';
+  document.getElementById('quickRow').style.display = 'flex';
+  overlay.style.display = 'block';
+  const m = messageStore[msgId];
+  const isMine = m && m.dir === 'out' && !m.deleted;
+  document.getElementById('menuReply').style.display = (m && !m.deleted) ? 'flex' : 'none';
+  document.getElementById('menuEdit').style.display = (isMine && m.kind === 'text') ? 'flex' : 'none';
+  document.getElementById('menuDelete').style.display = isMine ? 'flex' : 'none';
+  document.getElementById('menuCopy').style.display = (m && m.kind === 'text' && !m.deleted) ? 'flex' : 'none';
+  const rect = el.getBoundingClientRect();
+  const top = Math.min(rect.bottom + 6, window.innerHeight - 320);
+  let left = rect.left;
+  if (left + 250 > window.innerWidth) left = window.innerWidth - 260;
+  popup.style.top = Math.max(10, top) + 'px';
+  popup.style.left = Math.max(10, left) + 'px';
+}
+function closePopup() { document.getElementById('popupOverlay').style.display = 'none'; activePopupMsgId = null; }
+document.getElementById('popupOverlay').addEventListener('click', (e) => { if (e.target.id === 'popupOverlay') closePopup(); });
+document.getElementById('expandBtn').addEventListener('click', () => {
+  const grid = document.getElementById('fullGrid');
+  if (grid.style.display === 'none') {
+    grid.innerHTML = FULL_EMOJI.map(e => `<span>${e}</span>`).join('');
+    grid.style.display = 'grid';
+    [...grid.children].forEach(span => span.onclick = () => pickReaction(span.textContent));
+  } else grid.style.display = 'none';
+});
+document.querySelectorAll('.quick-emoji').forEach(el => el.addEventListener('click', () => pickReaction(el.textContent)));
+document.getElementById('menuReply').addEventListener('click', () => { if (activePopupMsgId) startReply(activePopupMsgId); closePopup(); });
+document.getElementById('menuCopy').addEventListener('click', () => {
+  if (activePopupMsgId && messageStore[activePopupMsgId]) navigator.clipboard.writeText(messageStore[activePopupMsgId].text).catch(() => {});
+  closePopup();
+});
+document.getElementById('menuEdit').addEventListener('click', () => { if (activePopupMsgId) startEdit(activePopupMsgId); closePopup(); });
+document.getElementById('menuDelete').addEventListener('click', () => { if (activePopupMsgId) requestDelete(activePopupMsgId); closePopup(); });
+function toggleMyReaction(msgId, emoji) {
+  if (myReactions[msgId] === emoji) { delete myReactions[msgId]; sendReaction(msgId, null); }
+  else { myReactions[msgId] = emoji; sendReaction(msgId, emoji); }
+  renderReactions(msgId);
+  if (currentRoomKey) updateHistoryReactions(currentRoomKey, msgId);
+}
+function pickReaction(emoji) {
+  if (!activePopupMsgId) return;
+  const msgId = activePopupMsgId;
+  myReactions[msgId] = emoji;
+  sendReaction(msgId, emoji);
+  renderReactions(msgId);
+  if (currentRoomKey) updateHistoryReactions(currentRoomKey, msgId);
+  closePopup();
+}
+async function sendReaction(msgId, emoji) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  try { ws.send(await encryptPayload({ type: 'reaction', msgId, emoji, from: myName })); } catch (e) {}
+}
+
+// ---------- composer emoji button ----------
+// On Android there is no way for a webpage to open the OS's native emoji
+// keyboard directly — that control belongs to the keyboard app, not the
+// browser. So on Android this just focuses the input, and the phone's own
+// keyboard (which already has an emoji key) takes over. On PC it opens our
+// own popup grid.
+function toggleComposerEmoji(evt) {
+  if (IS_ANDROID) { document.getElementById('msgInput').focus(); return; }
+  const overlay = document.getElementById('emojiOverlay');
+  const popup = document.getElementById('emojiPopup');
+  const grid = document.getElementById('composerGrid');
+  if (overlay.style.display === 'block') { overlay.style.display = 'none'; return; }
+  grid.innerHTML = FULL_EMOJI.map(e => `<span>${e}</span>`).join('');
+  grid.style.display = 'grid';
+  [...grid.children].forEach(span => span.onclick = () => {
+    const input = document.getElementById('msgInput');
+    input.value += span.textContent;
+    input.focus();
+  });
+  const rect = evt.currentTarget.getBoundingClientRect();
+  popup.style.top = Math.max(10, rect.top - 240) + 'px';
+  popup.style.left = Math.max(10, rect.left) + 'px';
+  overlay.style.display = 'block';
+}
+document.getElementById('emojiOverlay').addEventListener('click', (e) => { if (e.target.id === 'emojiOverlay') e.currentTarget.style.display = 'none'; });
+
+// ---------- reply ----------
+function startReply(msgId) {
+  const m = messageStore[msgId];
+  if (!m) return;
+  replyTarget = { id: msgId, name: m.dir === 'out' ? (myName || 'You') : (m.name || peerName || 'Them'), text: m.text };
+  document.getElementById('replyName').textContent = replyTarget.name;
+  document.getElementById('replyText').textContent = replyTarget.text;
+  document.getElementById('replyPreview').style.display = 'flex';
+  document.getElementById('msgInput').focus();
+}
+function cancelReply() { replyTarget = null; document.getElementById('replyPreview').style.display = 'none'; }
+
+// ---------- edit / unsend ----------
+let editTarget = null;
+function startEdit(msgId) {
+  const m = messageStore[msgId];
+  if (!m || m.dir !== 'out' || m.kind !== 'text' || m.deleted) return;
+  cancelReply();
+  editTarget = msgId;
+  document.getElementById('editPreview').style.display = 'flex';
+  const input = document.getElementById('msgInput');
+  input.value = m.content;
+  input.focus();
+}
+function cancelEdit() {
+  editTarget = null;
+  document.getElementById('editPreview').style.display = 'none';
+  document.getElementById('msgInput').value = '';
+}
+function applyEditToDom(msgId, newText) {
+  const b = document.querySelector('.bubble[data-msg-id="' + msgId + '"]');
+  if (b) {
+    renderBubbleContent(b, 'text', newText, false);
+    let ed = b.querySelector('.msg-edited');
+    if (!ed) {
+      ed = document.createElement('span');
+      ed.className = 'msg-edited';
+      ed.textContent = '(edited)';
+      b.querySelector('.meta').prepend(ed);
+    }
+  }
+  if (messageStore[msgId]) { messageStore[msgId].content = newText; messageStore[msgId].text = newText; messageStore[msgId].edited = true; }
+}
+function applyDeleteToDom(msgId) {
+  const b = document.querySelector('.bubble[data-msg-id="' + msgId + '"]');
+  if (b) renderBubbleContent(b, 'text', '', true);
+  if (messageStore[msgId]) { messageStore[msgId].deleted = true; messageStore[msgId].content = ''; messageStore[msgId].text = ''; }
+  const reactions = document.querySelector('.reactions[data-for="' + msgId + '"]');
+  if (reactions) reactions.innerHTML = '';
+  delete myReactions[msgId]; delete peerReactions[msgId];
+}
+function updateHistoryMessage(roomKey, msgId, fields) {
+  const arr = loadHistory(roomKey);
+  const item = arr.find(m => m.id === msgId);
+  if (!item) return;
+  Object.assign(item, fields);
+  saveHistory(roomKey, arr);
+}
+async function submitEdit() {
+  const input = document.getElementById('msgInput');
+  const newText = input.value.trim();
+  if (!newText || !editTarget || !ws || ws.readyState !== WebSocket.OPEN) return;
+  const msgId = editTarget;
+  try {
+    await ws.send(await encryptPayload({ type: 'edit', id: msgId, text: newText, from: myName }));
+    applyEditToDom(msgId, newText);
+    updateHistoryMessage(currentRoomKey, msgId, { text: newText, edited: true });
+    cancelEdit();
+  } catch (e) { addSys('Failed to save edit: ' + e.message); }
+}
+function requestDelete(msgId) {
+  if (!confirm('Delete this message for both of you? This cannot be undone.')) return;
+  applyDeleteToDom(msgId);
+  updateHistoryMessage(currentRoomKey, msgId, { deleted: true, text: '' });
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    encryptPayload({ type: 'delete', id: msgId, from: myName }).then(blob => ws.send(blob)).catch(() => {});
+  }
+}
+
+function setPeerHeader(name) {
+  peerName = name;
+  document.getElementById('avatar').textContent = name.charAt(0).toUpperCase();
+  document.getElementById('headerName').textContent = name;
+  if (currentRoomKey) upsertRoom({ key: currentRoomKey, peerName: name });
+}
+
+// ---------- connecting ----------
+function resetChatUI() {
+  document.getElementById('messages').innerHTML = '';
+  document.getElementById('avatar').textContent = '?';
+  document.getElementById('headerName').textContent = 'Waiting…';
+  document.getElementById('headerStatus').textContent = 'connecting…';
+  document.getElementById('headerStatus').classList.remove('online');
+  cancelReply();
+  cancelEdit();
+  closeSearch();
+  peerName = null;
+  myMessageOrder = [];
+  lastPeerMsgId = null;
+  for (const k in messageStore) delete messageStore[k];
+  for (const k in myReactions) delete myReactions[k];
+  for (const k in peerReactions) delete peerReactions[k];
+}
+
+async function fingerprintOf(pass, room) {
+  const digest = await crypto.subtle.digest('SHA-256', enc.encode(pass + '::' + room));
+  const bytes = new Uint8Array(digest);
+  return [...bytes.slice(0, 4)].map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+async function openRoom(cfg) {
+  intentionalClose = true;
+  if (ws) { try { ws.close(); } catch (e) {} }
+  clearTimeout(reconnectTimer);
+  reconnectAttempts = 0;
+  outgoingQueue = [];
+  currentRoomKey = cfg.key;
+  currentCfg = cfg;
+  resetChatUI();
+  showChatView();
+  renderRoomList();
+
+  myName = cfg.name;
+  try {
+    aesKey = await deriveKeyFromRoom(cfg.pass, cfg.room);
+  } catch (e) {
+    document.getElementById('headerStatus').textContent = 'connection failed';
+    if (!window.isSecureContext) {
+      addSys('Encryption is unavailable here — this page must be loaded over HTTPS, or from "localhost", for the browser to allow it. Plain http://<lan-ip> addresses are blocked by the browser itself. See the note below for how to fix this for LAN testing.');
+    } else {
+      addSys('Could not set up encryption: ' + e.message);
+    }
+    return;
+  }
+
+  if (cfg.peerName) setPeerHeader(cfg.peerName);
+
+  const history = loadHistory(cfg.key);
+  for (const m of history) {
+    const kind = m.kind || 'text';
+    const content = kind === 'text' ? m.text : null; // media content is never persisted — see appendHistory calls
+    addBubble(m.id, content, m.dir, m.time, m.name, m.replyTo, kind, { edited: m.edited, deleted: m.deleted, status: m.status || 'delivered' });
+    if (m.myReaction) myReactions[m.id] = m.myReaction;
+    if (m.peerReaction) peerReactions[m.id] = m.peerReaction;
+    if (m.myReaction || m.peerReaction) renderReactions(m.id);
+    if (m.dir === 'out') myMessageOrder.push(m.id);
+    if (m.dir === 'in') lastPeerMsgId = m.id;
+  }
+
+  connectWebSocket(cfg);
+}
+
+function connectWebSocket(cfg) {
+  intentionalClose = false;
+  const url = cfg.server.replace(/\/+$/, '') + '/' + encodeURIComponent(cfg.room);
+  ws = new WebSocket(url);
+
+  ws.onopen = async () => {
+    reconnectAttempts = 0;
+    document.getElementById('headerStatus').textContent = 'connected';
+    document.getElementById('headerStatus').classList.add('online');
+    addSys(document.getElementById('messages').dataset.everConnected ? 'Reconnected' : 'Connected — messages are end-to-end encrypted');
+    document.getElementById('messages').dataset.everConnected = '1';
+    updateNotifBtn();
+    updateSoundBtn();
+    if (!window._notifyPermissionAsked && localStorage.getItem('relay_notify') === null) {
+      window._notifyPermissionAsked = true;
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().then(() => updateNotifBtn());
+      }
+    }
+    const fp = await fingerprintOf(cfg.pass, cfg.room);
+    addSys('Key check: ' + fp + ' — this must be identical on both devices. If it differs, the passphrase or room name doesn\'t actually match somewhere.');
+    try { ws.send(await encryptPayload({ type: 'hello', name: myName })); } catch (e) {}
+    flushOutgoingQueue();
+  };
+
+  ws.onmessage = async (event) => {
+    let payload;
+    try {
+      payload = await decryptPayload(event.data);
+    } catch (e) {
+      if (!window._decryptWarned) {
+        window._decryptWarned = true;
+        addSys('Received a message that could not be decrypted — double check the room name and passphrase are typed exactly the same on both sides (case-sensitive, no extra spaces).');
+      }
+      return;
+    }
+
+    if (payload.type === 'hello') {
+      // ignore a "hello" that's just your OWN other device announcing
+      // itself into the room — only real peers update the header
+      if (payload.name !== myName) setPeerHeader(payload.name);
+    } else if (payload.type === 'msg') {
+      const isSelfEcho = payload.from === myName;
+      const time = nowLabel();
+      if (isSelfEcho) {
+        addBubble(payload.id, payload.text, 'out', time, myName, payload.replyTo);
+        myMessageOrder.push(payload.id);
+        appendHistory(currentRoomKey, { id: payload.id, text: payload.text, dir: 'out', name: myName, time, replyTo: payload.replyTo || null, myReaction: null, peerReaction: null, status: 'sent' });
+      } else {
+        if (peerName === null) setPeerHeader('Contact');
+        addBubble(payload.id, payload.text, 'in', time, peerName, payload.replyTo);
+        appendHistory(currentRoomKey, { id: payload.id, text: payload.text, dir: 'in', name: peerName, time, replyTo: payload.replyTo || null, myReaction: null, peerReaction: null });
+        document.getElementById('typing-row').style.display = 'none';
+        lastPeerMsgId = payload.id;
+        try { ws.send(await encryptPayload({ type: 'ack', id: payload.id, from: myName })); } catch (e) {}
+        if (roomActiveFocused) checkAndSendSeen();
+        notifyNewMessage();
+      }
+      touchRoomPreview(currentRoomKey, payload.text, time);
+    } else if (payload.type === 'image' || payload.type === 'voice') {
+      const isSelfEcho = payload.from === myName;
+      const time = nowLabel();
+      const kind = payload.type === 'image' ? 'image' : 'voice';
+      const content = payload.type === 'image' ? payload.dataUrl : payload.audioUrl;
+      const previewLabel = payload.type === 'image' ? '📷 Photo' : '🎤 Voice note';
+      if (isSelfEcho) {
+        addBubble(payload.id, content, 'out', time, myName, payload.replyTo, kind);
+        myMessageOrder.push(payload.id);
+        appendHistory(currentRoomKey, { id: payload.id, text: previewLabel, dir: 'out', name: myName, time, replyTo: payload.replyTo || null, myReaction: null, peerReaction: null, kind, status: 'sent' });
+      } else {
+        if (peerName === null) setPeerHeader('Contact');
+        addBubble(payload.id, content, 'in', time, peerName, payload.replyTo, kind);
+        document.getElementById('typing-row').style.display = 'none';
+        lastPeerMsgId = payload.id;
+        appendHistory(currentRoomKey, { id: payload.id, text: previewLabel, dir: 'in', name: peerName, time, replyTo: payload.replyTo || null, myReaction: null, peerReaction: null, kind });
+        try { ws.send(await encryptPayload({ type: 'ack', id: payload.id, from: myName })); } catch (e) {}
+        if (roomActiveFocused) checkAndSendSeen();
+        notifyNewMessage();
+      }
+      // the media itself is shown live but intentionally never written to
+      // local history storage — only this metadata trace is, so reopening
+      // the room later shows a "deleted media" placeholder rather than the
+      // message vanishing without a trace
+      touchRoomPreview(currentRoomKey, previewLabel, time);
+    } else if (payload.type === 'ack') {
+      const t = pendingTicks[payload.id];
+      if (t) t.innerHTML = tickSvg('delivered');
+      updateHistoryMessage(currentRoomKey, payload.id, { status: 'delivered' });
+    } else if (payload.type === 'seen') {
+      const idx = myMessageOrder.indexOf(payload.upTo);
+      if (idx !== -1) {
+        for (let i = 0; i <= idx; i++) {
+          const mid = myMessageOrder[i];
+          const t = pendingTicks[mid];
+          if (t) t.innerHTML = tickSvg('seen');
+          updateHistoryMessage(currentRoomKey, mid, { status: 'seen' });
+        }
+      }
+    } else if (payload.type === 'edit') {
+      applyEditToDom(payload.id, payload.text);
+      updateHistoryMessage(currentRoomKey, payload.id, { text: payload.text, edited: true });
+    } else if (payload.type === 'delete') {
+      applyDeleteToDom(payload.id);
+      updateHistoryMessage(currentRoomKey, payload.id, { deleted: true, text: '' });
+    } else if (payload.type === 'typing') {
+      if (payload.from === myName) return; // your own other device typing — nothing to show
+      const row = document.getElementById('typing-row');
+      document.getElementById('typing-name').textContent = peerName || 'They';
+      row.style.display = 'block';
+      clearTimeout(window._typingHideTimer);
+      window._typingHideTimer = setTimeout(() => { row.style.display = 'none'; }, 3000);
+    } else if (payload.type === 'reaction') {
+      const targetMap = payload.from === myName ? myReactions : peerReactions;
+      if (payload.emoji) targetMap[payload.msgId] = payload.emoji;
+      else delete targetMap[payload.msgId];
+      renderReactions(payload.msgId);
+      updateHistoryReactions(currentRoomKey, payload.msgId);
+    }
+  };
+
+  ws.onclose = () => {
+    document.getElementById('headerStatus').classList.remove('online');
+    if (intentionalClose || currentRoomKey !== cfg.key) {
+      document.getElementById('headerStatus').textContent = 'disconnected';
+      return;
+    }
+    if (reconnectAttempts === 0) addSys('Connection lost — reconnecting automatically…');
+    scheduleReconnect(cfg);
+  };
+  ws.onerror = () => {};
+}
+
+function scheduleReconnect(cfg) {
+  reconnectAttempts++;
+  const delaySec = Math.min(30, Math.pow(2, reconnectAttempts - 1));
+  document.getElementById('headerStatus').textContent = `reconnecting… (attempt ${reconnectAttempts})`;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => {
+    if (currentRoomKey === cfg.key) connectWebSocket(cfg);
+  }, delaySec * 1000);
+}
+
+// ---------- offline queue / retry ----------
+function queueOutgoing(id, blob) {
+  outgoingQueue.push({ id, blob });
+  const t = pendingTicks[id];
+  if (t) t.innerHTML = tickSvg('queued');
+}
+function flushOutgoingQueue() {
+  if (!ws || ws.readyState !== WebSocket.OPEN || outgoingQueue.length === 0) return;
+  const q = outgoingQueue;
+  outgoingQueue = [];
+  for (const item of q) {
+    try {
+      ws.send(item.blob);
+      const t = pendingTicks[item.id];
+      if (t) t.innerHTML = tickSvg('sent');
+      updateHistoryMessage(currentRoomKey, item.id, { status: 'sent' });
+    } catch (e) {
+      outgoingQueue.push(item); // still failing — try again on the next flush
+    }
+  }
+}
+async function retryMessage(msgId) {
+  const inQueue = outgoingQueue.find(item => item.id === msgId);
+  if (inQueue) {
+    if (ws && ws.readyState === WebSocket.OPEN) flushOutgoingQueue();
+    else addSys('Still offline — this will send automatically once reconnected');
+    return;
+  }
+  // a "queued" message from a previous session that never got its live
+  // queue entry restored — reconstruct and try again now
+  const m = messageStore[msgId];
+  if (!m || m.dir !== 'out' || m.kind !== 'text' || m.deleted) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) { addSys('Still offline — try again once reconnected'); return; }
+  try {
+    const blob = await encryptPayload({ type: 'msg', id: msgId, text: m.content, from: myName });
+    ws.send(blob);
+    const t = pendingTicks[msgId]; if (t) t.innerHTML = tickSvg('sent');
+    updateHistoryMessage(currentRoomKey, msgId, { status: 'sent' });
+  } catch (e) { addSys('Retry failed: ' + e.message); }
+}
+
+// ---------- notifications (on/off toggle + short tap sound) ----------
+// Deliberately generic notification text (no sender name or message
+// content) — a notification banner can be glanced at on a lock screen
+// without anyone unlocking the device, which is a different exposure than
+// deliberate physical access.
+function loadNotifyPref() { return localStorage.getItem('relay_notify') !== '0'; } // default on
+function saveNotifyPref(v) { localStorage.setItem('relay_notify', v ? '1' : '0'); }
+let notifyEnabled = loadNotifyPref();
+function updateNotifBtn() {
+  document.getElementById('notifBtn').classList.toggle('muted', !notifyEnabled);
+}
+async function toggleNotifications() {
+  notifyEnabled = !notifyEnabled;
+  saveNotifyPref(notifyEnabled);
+  if (notifyEnabled && 'Notification' in window && Notification.permission === 'default') {
+    await Notification.requestPermission();
+  }
+  updateNotifBtn();
+  addSys(notifyEnabled ? 'Notification banners on' : 'Notification banners off');
+}
+
+function loadSoundPref() { return localStorage.getItem('relay_sound') !== '0'; } // default on
+function saveSoundPref(v) { localStorage.setItem('relay_sound', v ? '1' : '0'); }
+let soundEnabled = loadSoundPref();
+function updateSoundBtn() {
+  document.getElementById('soundBtn').classList.toggle('muted', !soundEnabled);
+}
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  saveSoundPref(soundEnabled);
+  updateSoundBtn();
+  addSys(soundEnabled ? 'Tap sound on' : 'Tap sound off');
+  if (soundEnabled) playTapSound();
+}
+
+// short synthesized "tap" sound — no external audio file, works offline,
+// and avoids reproducing any copyrighted clip
+let audioCtx = null;
+document.addEventListener('pointerdown', function initAudioOnce() {
+  if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  else if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+}, { once: true });
+function playTapSound() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(900, t);
+    osc.frequency.exponentialRampToValueAtTime(500, t + 0.06);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.25, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.1);
+  } catch (e) {}
+}
+function notifyNewMessage() {
+  if (soundEnabled) playTapSound();
+  if (!notifyEnabled) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (document.hasFocus() && !document.hidden) return;
+  try {
+    const n = new Notification('Relay', { body: 'New message' });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch (e) {}
+}
+
+function forgetCurrentRoom() {
+  if (!currentRoomKey) return;
+  if (!confirm('Leave this room? It will be removed from your list, and its history on this device will be deleted.')) return;
+  intentionalClose = true;
+  clearTimeout(reconnectTimer);
+  const rooms = loadRooms().filter(r => r.key !== currentRoomKey);
+  saveRooms(rooms);
+  localStorage.removeItem(historyKeyFor(currentRoomKey));
+  if (ws) { try { ws.close(); } catch (e) {} }
+  currentRoomKey = null;
+  showListView();
+}
+
+async function sendMessage() {
+  if (editTarget) { await submitEdit(); return; }
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+  const id = genId();
+  const replyTo = replyTarget ? { id: replyTarget.id, name: replyTarget.name, text: replyTarget.text } : undefined;
+  try {
+    const blob = await encryptPayload({ type: 'msg', id, text, replyTo, from: myName });
+    ws.send(blob);
+    const time = nowLabel();
+    addBubble(id, text, 'out', time, myName, replyTo);
+    myMessageOrder.push(id);
+    appendHistory(currentRoomKey, { id, text, dir: 'out', name: myName, time, replyTo: replyTo || null, myReaction: null, peerReaction: null, status: 'sent' });
+    touchRoomPreview(currentRoomKey, text, time);
+    input.value = ''; input.style.height = 'auto';
+    cancelReply();
+  } catch (e) { addSys('Failed to send: ' + e.message); }
+}
+function handleTyping() {
+  const now = Date.now();
+  if (ws && ws.readyState === WebSocket.OPEN && now - lastTypingSent > 2000) {
+    lastTypingSent = now;
+    encryptPayload({ type: 'typing', from: myName }).then(blob => ws.send(blob)).catch(() => {});
+  }
+  const input = document.getElementById('msgInput');
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+}
+function handleKey(event) { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } }
+
+// ---------- image sending ----------
+function compressImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = () => { img.src = reader.result; };
+    reader.onerror = reject;
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) { height = Math.round(height * (maxDim / width)); width = maxDim; }
+        else { width = Math.round(width * (maxDim / height)); height = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleImagePick(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file || !ws || ws.readyState !== WebSocket.OPEN) return;
+  addSys('Sending photo…');
+  try {
+    const dataUrl = await compressImage(file, 1280, 0.75);
+    const id = genId();
+    const replyTo = replyTarget ? { id: replyTarget.id, name: replyTarget.name, text: replyTarget.text } : undefined;
+    const blob = await encryptPayload({ type: 'image', id, dataUrl, replyTo, from: myName });
+    ws.send(blob);
+    addBubble(id, dataUrl, 'out', nowLabel(), myName, replyTo, 'image');
+    myMessageOrder.push(id);
+    appendHistory(currentRoomKey, { id, text: '📷 Photo', dir: 'out', name: myName, time: nowLabel(), replyTo: replyTo || null, myReaction: null, peerReaction: null, kind: 'image', status: 'sent' });
+    touchRoomPreview(currentRoomKey, '📷 Photo', nowLabel());
+    cancelReply();
+  } catch (e) {
+    addSys('Could not send photo: ' + e.message);
+  }
+}
+
+// ---------- voice notes ----------
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingStream = null;
+
+async function toggleVoiceRecording() {
+  const micBtn = document.getElementById('micBtn');
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  try {
+    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    addSys('Could not access the microphone: ' + e.message);
+    return;
+  }
+  recordedChunks = [];
+  mediaRecorder = new MediaRecorder(recordingStream);
+  const startTime = Date.now();
+  mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = async () => {
+    micBtn.classList.remove('recording');
+    recordingStream.getTracks().forEach(t => t.stop());
+    const durationSec = Math.round((Date.now() - startTime) / 1000);
+    if (recordedChunks.length === 0 || durationSec < 1) return;
+    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const audioUrl = reader.result;
+      const id = genId();
+      const replyTo = replyTarget ? { id: replyTarget.id, name: replyTarget.name, text: replyTarget.text } : undefined;
+      try {
+        const outBlob = await encryptPayload({ type: 'voice', id, audioUrl, duration: durationSec, replyTo, from: myName });
+        ws.send(outBlob);
+        addBubble(id, audioUrl, 'out', nowLabel(), myName, replyTo, 'voice');
+        myMessageOrder.push(id);
+        appendHistory(currentRoomKey, { id, text: '🎤 Voice note', dir: 'out', name: myName, time: nowLabel(), replyTo: replyTo || null, myReaction: null, peerReaction: null, kind: 'voice', status: 'sent' });
+        touchRoomPreview(currentRoomKey, '🎤 Voice note', nowLabel());
+        cancelReply();
+      } catch (e) { addSys('Could not send voice note: ' + e.message); }
+    };
+    reader.readAsDataURL(blob);
+  };
+  mediaRecorder.start();
+  micBtn.classList.add('recording');
+}
+
+// ---------- search within this room ----------
+let searchMatches = [];
+let searchIndex = -1;
+function toggleSearch() {
+  const bar = document.getElementById('searchBar');
+  if (bar.style.display === 'flex') closeSearch();
+  else { bar.style.display = 'flex'; document.getElementById('searchInput').focus(); }
+}
+function closeSearch() {
+  document.getElementById('searchBar').style.display = 'none';
+  document.getElementById('searchInput').value = '';
+  document.querySelectorAll('.row.search-hidden').forEach(r => r.classList.remove('search-hidden'));
+  document.getElementById('searchCount').textContent = '';
+  searchMatches = []; searchIndex = -1;
+}
+function runSearch() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const rows = [...document.querySelectorAll('#messages .row:not(.sys)')];
+  if (!q) {
+    rows.forEach(r => r.classList.remove('search-hidden'));
+    document.getElementById('searchCount').textContent = '';
+    searchMatches = []; searchIndex = -1;
+    return;
+  }
+  searchMatches = [];
+  rows.forEach(row => {
+    const bubble = row.querySelector('.bubble');
+    const text = bubble ? bubble.textContent.toLowerCase() : '';
+    if (text.includes(q)) { row.classList.remove('search-hidden'); searchMatches.push(row); }
+    else row.classList.add('search-hidden');
+  });
+  searchIndex = searchMatches.length ? 0 : -1;
+  updateSearchCount();
+  if (searchIndex !== -1) scrollToSearchMatch();
+}
+function updateSearchCount() {
+  document.getElementById('searchCount').textContent = searchMatches.length ? (searchIndex + 1) + '/' + searchMatches.length : '0/0';
+}
+function scrollToSearchMatch() {
+  const row = searchMatches[searchIndex];
+  if (!row) return;
+  const bubble = row.querySelector('.bubble');
+  clearHighlight();
+  if (bubble) { bubble.classList.add('highlighted'); highlightedMsgId = bubble.dataset.msgId; }
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function searchNav(dir) {
+  if (searchMatches.length === 0) return;
+  searchIndex = (searchIndex + dir + searchMatches.length) % searchMatches.length;
+  updateSearchCount();
+  scrollToSearchMatch();
+}
+
+// ---------- boot ----------
+(function init() {
+  renderRoomList();
+  const isSplitView = window.matchMedia('(orientation: landscape) and (min-width: 700px)').matches;
+  if (isSplitView) {
+    const rooms = loadRooms();
+    if (rooms.length) openRoom(rooms[0]); else showListView();
+  } else {
+    showListView();
+  }
+})();
+</script>
+</body>
+</html>
